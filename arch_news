@@ -1,0 +1,55 @@
+#!/usr/bin/env python2
+
+from __future__ import print_function
+
+import feedparser
+import pypandoc
+import re
+import sys
+import time
+import mdv
+
+ARCH_FEED_LOCATION = 'https://www.archlinux.org/feeds/news/'
+EPOCH = time.gmtime(0)
+PACMAN_LOGFILE_LOCATION = '/var/log/pacman.log'
+PACMAN_TIME_FSTRING = '%Y-%m-%d %H:%M'
+CONTINUE_MESSAGE = "Press enter to continue..."
+OUTPUT_TIME_FSTRING = '%Y-%m-%d'
+
+
+def main():
+    with open(PACMAN_LOGFILE_LOCATION) as logfile:
+        for line in reversed(list(logfile)):
+            if 'pacman -S -y -u' in line:
+                time_string = re.search(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}', line).group()
+                last_update = time.strptime(time_string, PACMAN_TIME_FSTRING)
+                break
+        else:
+            last_update = EPOCH  # Any point sufficiently far back would do.
+
+    unread_news = False
+    for item in feedparser.parse(ARCH_FEED_LOCATION)['entries']:
+        if item['published_parsed'] > last_update:
+            # mdv.term_columns = 120
+            unread_news = True
+
+            md = []
+            md.append('# ' + item['title'] + ', ' + time.strftime(
+                OUTPUT_TIME_FSTRING, item['published_parsed']))
+            # md.append('')
+            md.append(pypandoc.convert_text(item['summary'], "markdown", 'html'))
+
+            print(mdv.main('\n'.join(md), cols=80))
+            # print(item['summary'])
+            for link in item['links']:
+                print(link['href'])
+
+    if unread_news:
+        try:
+            raw_input(CONTINUE_MESSAGE)  # Py2
+        except NameError:
+            input(CONTINUE_MESSAGE)  # Py3
+
+
+if __name__ == "__main__":
+    main()
